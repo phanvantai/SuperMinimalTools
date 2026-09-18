@@ -52,8 +52,52 @@ struct SuperMinimalToolsApp: App {
 struct StatusBarLabel: View {
     var stats: SystemStatsStore
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        content
+            .onAppear {
+                // Dev/testing hook: `open SuperMinimalTools.app --args --open-cleaner`
+                if CommandLine.arguments.contains("--open-cleaner") {
+                    openWindow(id: "disk-cleaner")
+                    NSApp.activate()
+                }
+                // Dev/testing hook: exports the live readout as a PNG for docs:
+                // `open SuperMinimalTools.app --args --export-menubar /path/out.png`
+                if let index = CommandLine.arguments.firstIndex(of: "--export-menubar"),
+                   CommandLine.arguments.count > index + 1 {
+                    let path = CommandLine.arguments[index + 1]
+                    Task {
+                        try? await Task.sleep(for: .seconds(7)) // let a few samples arrive
+                        exportMenuBarReadout(to: path)
+                        exit(0)
+                    }
+                }
+            }
+    }
+
+    private func exportMenuBarReadout(to path: String) {
+        let reading = stats.bandwidth ?? BandwidthReading(downloadBytesPerSecond: 0, uploadBytesPerSecond: 0)
+        let content = StatusBarReadout(
+            temperatureText: stats.cpuTemperature.map { "\(Int($0.rounded()))°" } ?? "--°",
+            downloadText: "↓" + ByteFormatting.compactRate(reading.downloadBytesPerSecond),
+            uploadText: "↑" + ByteFormatting.compactRate(reading.uploadBytesPerSecond),
+            baseColor: .white
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(Color(red: 0.11, green: 0.11, blue: 0.13))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 4
+        guard let tiff = renderer.nsImage?.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
+    }
+
+    @ViewBuilder
+    private var content: some View {
         if stats.statusBarText.isEmpty {
             Image(systemName: "gauge.with.needle")
         } else {

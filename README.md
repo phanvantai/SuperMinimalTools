@@ -6,6 +6,14 @@
 
 <p align="center">A super-minimal macOS menu bar utility: CPU temperature, network speed, and a developer-focused disk cleaner. No Electron, no subscriptions, no telemetry — one tiny native app.</p>
 
+<p align="center">
+  <img src="docs/menubar.png" width="240" alt="Menu bar readout: CPU temperature, download and upload speed">
+</p>
+
+<p align="center">
+  <img src="docs/disk-cleaner.png" width="760" alt="Disk Cleaner window with per-item selection">
+</p>
+
 ## Features
 
 **📊 Menu bar stats** — live in your status bar, updated every 2 seconds:

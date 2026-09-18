@@ -210,7 +210,38 @@ struct DiskCleanerView: View {
         }
         .onAppear {
             hasFullDiskAccess = FullDiskAccess.isGranted
+            // Dev/testing hook: renders the window to a PNG once the scan is done:
+            // `open SuperMinimalTools.app --args --open-cleaner --export-window /path/out.png`
+            if Self.windowExportPath != nil {
+                diskCleanerEnabled = true
+                hasFullDiskAccess = true
+            }
         }
+        .onChange(of: model.phase) { _, newPhase in
+            guard newPhase == .ready, let path = Self.windowExportPath else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                Self.exportWindow(to: path)
+                exit(0)
+            }
+        }
+    }
+
+    private static var windowExportPath: String? {
+        guard let index = CommandLine.arguments.firstIndex(of: "--export-window"),
+              CommandLine.arguments.count > index + 1 else { return nil }
+        return CommandLine.arguments[index + 1]
+    }
+
+    /// Renders the cleaner window's view hierarchy to a PNG. Unlike
+    /// screencapture, this needs no Screen Recording permission.
+    private static func exportWindow(to path: String) {
+        guard let window = NSApp.windows.first(where: { $0.title == "Disk Cleaner" }),
+              let contentView = window.contentView,
+              let rep = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds) else { return }
+        contentView.cacheDisplay(in: contentView.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return }
+        try? png.write(to: URL(fileURLWithPath: path))
     }
 
     private var disabledView: some View {
@@ -276,6 +307,7 @@ struct DiskCleanerView: View {
             footer
                 .padding(12)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .confirmationDialog(
             "Clean \(model.totalSelectedItemCount) selected item(s)?",
             isPresented: $isConfirmingClean
