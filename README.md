@@ -32,7 +32,7 @@
 ### Build from source
 
 ```bash
-git clone https://github.com/<your-username>/SuperMinimalTools.git
+git clone https://github.com/phanvantai/SuperMinimalTools.git
 cd SuperMinimalTools
 xcodebuild -project SuperMinimalTools.xcodeproj \
            -scheme SuperMinimalTools -configuration Release build
