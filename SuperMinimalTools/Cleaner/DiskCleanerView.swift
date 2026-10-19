@@ -185,7 +185,16 @@ final class DiskCleanerModel {
 }
 
 struct DiskCleanerView: View {
+    enum Mode: Hashable {
+        case cleanup, browse
+    }
+
     @State private var model = DiskCleanerModel()
+    @State private var browser = FolderBrowserModel()
+    @State private var mode: Mode = Self.launchMode
+    /// Set when the folder browser deleted something, so the cleanup list
+    /// is rescanned the next time it is shown.
+    @State private var cleanupIsStale = false
     @State private var isConfirmingClean = false
     @AppStorage("diskCleanerEnabled") private var diskCleanerEnabled = false
     @State private var hasFullDiskAccess = FullDiskAccess.isGranted
@@ -208,6 +217,22 @@ struct DiskCleanerView: View {
                 await model.scan()
             }
         }
+        .onChange(of: browser.deletionCount) {
+            cleanupIsStale = true
+        }
+        .onChange(of: mode) { _, newMode in
+            switch newMode {
+            case .browse:
+                if browser.entries.isEmpty, browser.listingError == nil {
+                    browser.reload()
+                }
+            case .cleanup:
+                if cleanupIsStale {
+                    cleanupIsStale = false
+                    Task { await model.scan() }
+                }
+            }
+        }
         .onAppear {
             hasFullDiskAccess = FullDiskAccess.isGranted
             // Dev/testing hook: renders the window to a PNG once the scan is done:
@@ -216,15 +241,51 @@ struct DiskCleanerView: View {
                 diskCleanerEnabled = true
                 hasFullDiskAccess = true
             }
+            if mode == .browse {
+                if let path = Self.launchBrowsePath {
+                    browser.open(CleanupScanner.expand(path))
+                } else {
+                    browser.reload()
+                }
+            }
         }
         .onChange(of: model.phase) { _, newPhase in
-            guard newPhase == .ready, let path = Self.windowExportPath else { return }
+            guard newPhase == .ready, mode == .cleanup, let path = Self.windowExportPath else { return }
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1))
                 Self.exportWindow(to: path)
                 exit(0)
             }
         }
+        .onChange(of: browser.isMeasuring) { _, measuring in
+            guard !measuring, mode == .browse, let path = Self.windowExportPath else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1))
+                Self.exportWindow(to: path)
+                exit(0)
+            }
+        }
+    }
+
+    /// Dev/testing hook: `--cleaner-mode browse [--browse-path ~/Library]`
+    /// opens the window on the folder browser instead of the cleanup list.
+    private static var launchMode: Mode {
+        guard let index = CommandLine.arguments.firstIndex(of: "--cleaner-mode"),
+              CommandLine.arguments.count > index + 1,
+              CommandLine.arguments[index + 1] == "browse" else { return .cleanup }
+        return .browse
+    }
+
+    private static var launchBrowsePath: String? {
+        guard let index = CommandLine.arguments.firstIndex(of: "--browse-path"),
+              CommandLine.arguments.count > index + 1 else { return nil }
+        return CommandLine.arguments[index + 1]
+    }
+
+    /// Switches to the folder browser, opened at `url`.
+    private func browse(_ url: URL) {
+        browser.open(url)
+        mode = .browse
     }
 
     private static var windowExportPath: String? {
@@ -301,11 +362,16 @@ struct DiskCleanerView: View {
             header
                 .padding(16)
             Divider()
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            footer
-                .padding(12)
+            switch mode {
+            case .cleanup:
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Divider()
+                footer
+                    .padding(12)
+            case .browse:
+                FolderBrowserView(model: browser)
+            }
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .confirmationDialog(
@@ -313,7 +379,10 @@ struct DiskCleanerView: View {
             isPresented: $isConfirmingClean
         ) {
             Button(model.deletePermanently ? "Delete Permanently" : "Move to Trash & Clean", role: .destructive) {
-                Task { await model.clean() }
+                Task {
+                    await model.clean()
+                    browser.invalidateAllSizes()
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -332,10 +401,21 @@ struct DiskCleanerView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Button(model.phase == .scanning ? "Scanning…" : "Rescan") {
-                Task { await model.scan() }
+            VStack(alignment: .trailing, spacing: 8) {
+                Picker("Mode", selection: $mode) {
+                    Text("Cleanup").tag(Mode.cleanup)
+                    Text("Browse Folders").tag(Mode.browse)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                if mode == .cleanup {
+                    Button(model.phase == .scanning ? "Scanning…" : "Rescan") {
+                        Task { await model.scan() }
+                    }
+                    .disabled(model.phase == .scanning || model.phase == .cleaning)
+                }
             }
-            .disabled(model.phase == .scanning || model.phase == .cleaning)
         }
     }
 
@@ -356,7 +436,7 @@ struct DiskCleanerView: View {
         case .scanning:
             VStack(spacing: 12) {
                 ProgressView()
-                Text("Scanning known cache locations…")
+                Text("Scanning caches, developer tools and project folders…")
                     .foregroundStyle(.secondary)
             }
         case .ready, .cleaning:
@@ -428,6 +508,14 @@ struct DiskCleanerView: View {
             trailingSizeText(result)
         }
         .padding(.vertical, 2)
+        .contextMenu {
+            let folders = result.category.involvedPaths
+                .map(CleanupScanner.expand)
+                .filter { FileManager.default.fileExists(atPath: $0.path) }
+            ForEach(folders, id: \.path) { folder in
+                Button("Browse \(abbreviatedPath(folder))") { browse(folder) }
+            }
+        }
     }
 
     private func trailingSizeText(_ result: CategoryScanResult) -> some View {
@@ -470,6 +558,16 @@ struct DiskCleanerView: View {
                 }
             }
             Spacer()
+            if item.url.hasDirectoryPath {
+                Button {
+                    browse(item.url)
+                } label: {
+                    Image(systemName: "folder.badge.magnifyingglass")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Browse inside this folder")
+            }
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([item.url])
             } label: {
@@ -484,6 +582,9 @@ struct DiskCleanerView: View {
         }
         .padding(.leading, 6)
         .contextMenu {
+            if item.url.hasDirectoryPath {
+                Button("Browse Inside") { browse(item.url) }
+            }
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([item.url])
             }

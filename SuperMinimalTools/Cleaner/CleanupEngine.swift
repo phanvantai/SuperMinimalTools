@@ -11,8 +11,9 @@ nonisolated struct CleanupOutcome: Sendable {
     let failures: [String]
 }
 
-/// Performs the actual cleanup. Only ever acts on items resolved by
-/// CleanupScanner from the curated catalog — never on arbitrary paths.
+/// Performs the actual cleanup. Acts on items resolved by CleanupScanner from
+/// the curated catalog, or on items the user picked in the folder browser.
+/// Every file deletion passes through DeletionGuard first.
 nonisolated enum CleanupEngine {
 
     /// Synchronous on purpose: callers run it via Task.detached so the file
@@ -45,22 +46,40 @@ nonisolated enum CleanupEngine {
                 }
             }
 
-        case .trashContents, .findAndTrashDirectories:
-            for item in selection.items {
-                do {
-                    if permanently {
-                        try fileManager.removeItem(at: item.url)
-                    } else {
-                        try fileManager.trashItem(at: item.url, resultingItemURL: nil)
-                    }
-                    freed += item.sizeBytes
-                } catch {
-                    failures.append("\(item.url.lastPathComponent): \(error.localizedDescription)")
-                }
-            }
+        case .trashContents, .findProjectArtifacts, .findFiles:
+            let outcome = remove(selection.items, permanently: permanently)
+            freed = outcome.freedBytes
+            failures = outcome.failures
         }
 
         return CleanupOutcome(categoryID: selection.id, freedBytes: freed, failures: failures)
+    }
+
+    /// Trashes (or permanently deletes) the given items. Items DeletionGuard
+    /// protects are refused, whatever their origin.
+    static func remove(_ items: [ScannedItem], permanently: Bool) -> (freedBytes: Int64, failures: [String], removedPaths: [String]) {
+        let fileManager = FileManager.default
+        var freed: Int64 = 0
+        var failures: [String] = []
+        var removed: [String] = []
+        for item in items {
+            if let reason = DeletionGuard.refusalReason(for: item.url) {
+                failures.append("\(item.url.lastPathComponent): \(reason)")
+                continue
+            }
+            do {
+                if permanently {
+                    try fileManager.removeItem(at: item.url)
+                } else {
+                    try fileManager.trashItem(at: item.url, resultingItemURL: nil)
+                }
+                freed += item.sizeBytes
+                removed.append(item.url.path)
+            } catch {
+                failures.append("\(item.url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        return (freed, failures, removed)
     }
 
     /// Runs a maintenance CLI (xcrun, brew, docker). Returns an error message,

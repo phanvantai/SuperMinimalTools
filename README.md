@@ -24,10 +24,13 @@
 
 **🧹 Disk Cleaner** — built for developers whose 512 GB disk is always at 95%:
 
-- Scans a **curated catalog** of known junk locations only — it never touches anything outside it: Xcode DerivedData, Device Support, old simulators, Archives, npm/pnpm/Yarn/SwiftPM/CocoaPods/Gradle/Homebrew caches, app & browser caches, AI model caches, Android emulator images, Docker, project `node_modules`, logs, and Trash.
+- Scans a **curated catalog** of known junk locations: Xcode DerivedData, Device Support, previews & simulator caches, old simulators, Archives, npm/pnpm/Yarn/Bun/SwiftPM/CocoaPods/Gradle/Cargo/Maven/pub (Flutter)/Homebrew caches, app & browser caches, VS Code/Cursor/Slack/Discord caches, AI model caches, Android emulators & system images, iPhone backups, Docker, logs, and Trash.
+- **Project folders**: finds `node_modules`, `Pods` and build outputs (Flutter `build`/`.dart_tool`, Rust `target`, Gradle, Next.js `.next`) in `~/Developer`, `~/Projects`, `~/Documents`… — a `build` folder only counts when its project file (`pubspec.yaml`, `build.gradle`…) sits next to it.
+- **Personal files**: leftover installers (`.dmg`, `.pkg`, `.xip`, `.ipsw`) and files over 500 MB in Downloads, Desktop, Documents and Movies.
+- **Browse Folders**: a disk-usage browser — start anywhere (home, Library, Developer, any folder), see children sorted by size, drill in, tick items across several folders and move them to the Trash in one go. Standard macOS folders (`~/Library`, `~/Documents`, `~/Library/Caches`…), `.ssh`, Keychains and anything outside your home are protected and can only be viewed.
 - **Per-item selection**: expand any category and keep exactly what you need (e.g. keep the DerivedData of the project you're working on).
 - **Trash-first**: everything is moved to the Trash unless you explicitly choose permanent deletion. External tools (simulators, Homebrew, Docker) are cleaned via their own CLIs (`simctl`, `brew cleanup`, `docker system prune`) — never raw file deletion.
-- Risky categories (Archives, ML models, Docker, `node_modules`) are marked **caution** and unchecked by default.
+- Risky categories (Archives, ML models, Docker, emulators, backups, `node_modules`, personal files) are marked **caution** and unchecked by default.
 - Disabled by default; enabling walks you through granting Full Disk Access.
 
 ## Requirements
