@@ -40,6 +40,10 @@
 
 ## Install
 
+### Download
+
+Get [SuperMinimalTools.zip](https://github.com/phanvantai/SuperMinimalTools/releases/latest/download/SuperMinimalTools.zip) from the latest release, unzip it and move the app to Applications. Builds are signed and notarized, and update themselves: the app checks GitHub once a day and asks before installing (turn it off with **Check for updates automatically** in the dropdown, or use **Check for Updates…**).
+
 ### Build from source
 
 ```bash
@@ -53,13 +57,13 @@ Or open `SuperMinimalTools.xcodeproj` in Xcode and press ⌘R.
 
 ### First launch
 
-If you downloaded a build instead of compiling it yourself, macOS Gatekeeper may block it: right-click the app → **Open** → **Open**.
+Builds before 0.1.2 weren't notarized, so macOS Gatekeeper may block them: right-click the app → **Open** → **Open**. They also can't update themselves; download the latest release once.
 
 ## Permissions & privacy
 
 - **Full Disk Access** is requested only when you enable the Disk Cleaner — macOS protects locations like the Trash and browser caches. The scan is read-only; nothing is deleted until you press Clean and confirm.
 - **No sandbox**: reading CPU temperature (SMC/IOKit) and cleaning caches outside the app's own container are impossible in a sandboxed app. This is also why the app can't be on the Mac App Store.
-- No network calls, no analytics, no data collection. The only thing the app uploads is nothing.
+- No analytics, no data collection. The only network request is the update check: it downloads the release feed (`appcast.xml`) from GitHub, sending nothing but the app's name and version (in the User-Agent). Turn it off from the dropdown.
 
 ## How it works
 
@@ -69,6 +73,7 @@ If you downloaded a build instead of compiling it yourself, macOS Gatekeeper may
 | Network speed | `getifaddrs` byte counters over `en*` interfaces, sampled every 2 s |
 | Disk scanning | `FileManager` enumeration of a hard-coded catalog, sizes from `totalFileAllocatedSize` |
 | Deletion | `FileManager.trashItem` (recoverable) or `removeItem` (opt-in permanent) |
+| Updates | [Sparkle](https://sparkle-project.org), EdDSA-signed zips and an appcast attached to each GitHub release (`scripts/release.sh`) |
 
 ## License
 

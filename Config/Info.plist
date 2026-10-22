@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists/PropertyList-1.0.dtd">
+<!-- Merged with the generated Info.plist. Sparkle reads its feed and update-signing key from here. -->
+<plist version="1.0">
+<dict>
+	<key>SUFeedURL</key>
+	<string>https://github.com/phanvantai/SuperMinimalTools/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>ja0R9ct7f82u8PIgHjr/zKOxYD0eCpQyIZMGs8NCskM=</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+</dict>
+</plist>

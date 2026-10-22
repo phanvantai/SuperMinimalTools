@@ -10,6 +10,7 @@ import ServiceManagement
 /// Dropdown shown when clicking the status bar item.
 struct MenuContentView: View {
     @Bindable var stats: SystemStatsStore
+    @Bindable var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -66,6 +67,20 @@ struct MenuContentView: View {
 
             Divider()
 
+            if let version = updater.pendingVersion {
+                Button("Update to \(version)…") {
+                    checkForUpdates()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
+            Button("Check for Updates…") {
+                checkForUpdates()
+            }
+            .disabled(!updater.canCheckForUpdates)
+
+            Divider()
+
             Button("Quit SuperMinimalTools") {
                 NSApp.terminate(nil)
             }
@@ -79,6 +94,11 @@ struct MenuContentView: View {
         openWindow(id: "disk-cleaner")
         NSApp.activate()
         dismiss()
+    }
+
+    private func checkForUpdates() {
+        dismiss()
+        updater.checkForUpdates()
     }
 
     private func updateLaunchAtLogin(_ isOn: Bool) {

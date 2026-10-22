@@ -11,6 +11,7 @@ import AppKit
 @main
 struct SuperMinimalToolsApp: App {
     @State private var stats = SystemStatsStore()
+    @State private var updater = AppUpdater()
 
     init() {
         Self.terminateOlderInstances()
@@ -18,7 +19,7 @@ struct SuperMinimalToolsApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(stats: stats)
+            MenuContentView(stats: stats, updater: updater)
         } label: {
             StatusBarLabel(stats: stats)
         }
