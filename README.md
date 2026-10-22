@@ -33,6 +33,12 @@
 - Risky categories (Archives, ML models, Docker, emulators, backups, `node_modules`, personal files) are marked **caution** and unchecked by default.
 - Disabled by default; enabling walks you through granting Full Disk Access.
 
+**📋 Clipboard History** — off by default; turn it on from the dropdown:
+
+- Remembers the last 200 pieces of text you copy, with the app they came from.
+- Press **⌃⌘V** anywhere (or choose **Clipboard History…**) for a Spotlight-style picker: type to search, ↑/↓ to choose, ↩ to copy it back, then ⌘V to paste. Right-click an item to delete it.
+- Text that password managers mark as concealed or transient is never recorded. The history is stored only on your Mac (`~/Library/Application Support/com.boolery.SuperMinimalTools/clipboard-history.json`, readable only by you) and is deleted when you turn the feature off.
+
 ## Requirements
 
 - macOS 15 (Sequoia) or newer
@@ -73,6 +79,7 @@ Builds before 0.1.2 weren't notarized, so macOS Gatekeeper may block them: right
 | Network speed | `getifaddrs` byte counters over `en*` interfaces, sampled every 2 s |
 | Disk scanning | `FileManager` enumeration of a hard-coded catalog, sizes from `totalFileAllocatedSize` |
 | Deletion | `FileManager.trashItem` (recoverable) or `removeItem` (opt-in permanent) |
+| Clipboard history | `NSPasteboard` change count polled every 0.5 s; ⌃⌘V via Carbon `RegisterEventHotKey` (no Accessibility permission needed) |
 | Updates | [Sparkle](https://sparkle-project.org), EdDSA-signed zips and an appcast attached to each GitHub release (`scripts/release.sh`) |
 
 ## License

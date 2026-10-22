@@ -11,6 +11,7 @@ import ServiceManagement
 struct MenuContentView: View {
     @Bindable var stats: SystemStatsStore
     @Bindable var updater: AppUpdater
+    @Bindable var clipboard: ClipboardHistory
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -57,6 +58,22 @@ struct MenuContentView: View {
             if diskCleanerEnabled {
                 Button("Disk Cleaner…") {
                     openDiskCleaner()
+                }
+            }
+
+            Toggle("Enable Clipboard History", isOn: $clipboard.isEnabled)
+            if clipboard.isEnabled {
+                Button {
+                    dismiss()
+                    // After the dropdown is gone, or closing it takes focus from the panel.
+                    Task { clipboard.showPanel() }
+                } label: {
+                    HStack {
+                        Text("Clipboard History…")
+                        Spacer()
+                        Text("⌃⌘V")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

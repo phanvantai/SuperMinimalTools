@@ -5,6 +5,7 @@
 
 import Testing
 import Foundation
+import AppKit
 @testable import SuperMinimalTools
 
 struct ByteFormattingTests {
@@ -255,5 +256,56 @@ struct FolderSizerTests {
         #expect((size ?? 0) >= 2 * 1024 * 1024)
         #expect(totals[big.standardizedFileURL.path] != nil)
         #expect(totals[fixture.appendingPathComponent("small").standardizedFileURL.path] == nil)
+    }
+}
+
+@MainActor
+struct ClipboardHistoryTests {
+
+    private func makeHistory(storageURL: URL = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString).appending(path: "clipboard-history.json")) -> ClipboardHistory {
+        let defaults = UserDefaults(suiteName: "ClipboardHistoryTests-\(UUID().uuidString)")!
+        return ClipboardHistory(defaults: defaults, storageURL: storageURL)
+    }
+
+    @Test func copyingTheSameTextAgainMovesItToTheTop() {
+        let history = makeHistory()
+        history.record("first", sourceBundleID: nil)
+        history.record("second", sourceBundleID: nil)
+        history.record("first", sourceBundleID: nil)
+        #expect(history.items.map(\.text) == ["first", "second"])
+    }
+
+    @Test func blankAndOversizedTextIsSkipped() {
+        let history = makeHistory()
+        history.record("  \n\t", sourceBundleID: nil)
+        history.record(String(repeating: "x", count: ClipboardHistory.maxTextBytes + 1), sourceBundleID: nil)
+        #expect(history.items.isEmpty)
+    }
+
+    @Test func keepsOnlyTheNewestItems() {
+        let history = makeHistory()
+        for index in 0...ClipboardHistory.maxItems {
+            history.record("item \(index)", sourceBundleID: nil)
+        }
+        #expect(history.items.count == ClipboardHistory.maxItems)
+        #expect(history.items.first?.text == "item \(ClipboardHistory.maxItems)")
+        #expect(!history.items.contains { $0.text == "item 0" })
+    }
+
+    @Test func passwordManagerContentIsNotRecorded() {
+        let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+        #expect(ClipboardHistory.shouldRecord(types: [.string]))
+        #expect(!ClipboardHistory.shouldRecord(types: [.string, concealed]))
+        #expect(!ClipboardHistory.shouldRecord(types: [.png]))
+    }
+
+    @Test func historySurvivesARelaunch() {
+        let storageURL = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString).appending(path: "clipboard-history.json")
+        makeHistory(storageURL: storageURL).record("kept", sourceBundleID: "com.apple.Safari")
+        let reloaded = makeHistory(storageURL: storageURL)
+        #expect(reloaded.items.map(\.text) == ["kept"])
+        #expect(reloaded.items.first?.sourceBundleID == "com.apple.Safari")
     }
 }
