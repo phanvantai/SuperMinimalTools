@@ -13,8 +13,9 @@ import Foundation
 /// The word is recomposed from all of its keys on every keystroke, so the
 /// result depends only on what was typed. Marks are added only while the word
 /// can still become a Vietnamese syllable; once it can't (`string`, `what`),
-/// the word is shown exactly as typed. Tones follow the modern placement
-/// (`hoà`, `thuý`).
+/// the word is shown exactly as typed, except that repeating the last letter
+/// stretches the word instead (`điii`, `đẹppp`). Tones follow the modern
+/// placement (`hoà`, `thuý`).
 nonisolated enum Telex {
 
     static func compose(_ keys: [Character]) -> String {
@@ -26,19 +27,41 @@ nonisolated enum Telex {
                 continue
             }
             switch word.applying(key) {
-            case .changed(let changed) where changed.isPossibleSyllable:
-                word = changed
             case .undone(let undone):
                 word = undone
                 typesLiterally = true
-            default:
-                word.append(key)
-                if !word.isPossibleSyllable {
-                    return String(keys)
+                continue
+            case .changed(var changed):
+                changed.completeHornedUO()
+                if changed.isPossibleSyllable {
+                    word = changed
+                    continue
                 }
+            case .literal:
+                break
+            }
+            var appended = word
+            appended.append(key)
+            appended.completeHornedUO()
+            if appended.isPossibleSyllable {
+                word = appended
+            } else if word.letters.last?.base == Character(key.lowercased()) {
+                // A repeated letter stretches the word: `điii`, `đẹppp`, `khônggg`.
+                word.pinTone()
+                word.append(key)
+                typesLiterally = true
+            } else {
+                return typedAsIs(keys)
             }
         }
         return word.text
+    }
+
+    /// The keys as typed, except that a leading `dd` stays đ: no English word
+    /// starts with it, and abbreviations like `đc` (được) or `đt` need it.
+    private static func typedAsIs(_ keys: [Character]) -> String {
+        guard keys.count >= 2, keys[0].lowercased() == "d", keys[1].lowercased() == "d" else { return String(keys) }
+        return (keys[0] == "D" ? "Đ" : "đ") + String(keys.dropFirst(2))
     }
 
     /// Keys that compose back into `text`, used to keep editing a word after
@@ -209,6 +232,8 @@ nonisolated enum Telex {
     private struct Word {
         var letters: [Letter] = []
         var tone: Tone = .none
+        /// Where the tone stays once the word is typed literally (`đìii`, not `điìi`).
+        var pinnedToneIndex: Int?
 
         enum Step {
             case changed(Word)
@@ -219,6 +244,22 @@ nonisolated enum Telex {
 
         mutating func append(_ key: Character) {
             letters.append(Letter(key: key))
+        }
+
+        mutating func pinTone() {
+            pinnedToneIndex = toneIndex(parts: parts)
+        }
+
+        /// ưo or uơ with more letters after it is ươ (`dduwong` → `đương`).
+        mutating func completeHornedUO() {
+            guard let nucleus = parts?.nucleus,
+                  let u = nucleus.first(where: { letters[$0].base == "u" }),
+                  nucleus.contains(u + 1), letters[u + 1].base == "o", u + 2 < letters.count else { return }
+            let marks = (letters[u].mark, letters[u + 1].mark)
+            if marks == (.horn, .none) || marks == (.none, .horn) {
+                letters[u].mark = .horn
+                letters[u + 1].mark = .horn
+            }
         }
 
         func applying(_ key: Character) -> Step {
@@ -245,15 +286,20 @@ nonisolated enum Telex {
                 guard let index = nucleus.last(where: { letters[$0].base == lower }) else { return .literal }
                 if letters[index].mark == .circumflex {
                     word.letters[index].mark = .none
+                    word.pinTone()
                     word.append(key)
+                    // `quấ` + a is `quáaa`: the a's stretch the word.
+                    if index == letters.count - 1, tone != .none { word.append(key) }
                     return .undone(word)
                 }
                 word.letters[index].mark = .circumflex
                 return .changed(word)
 
-            case "d" where letters.count == 1 && letters[0].base == "d":
+            // The d can come anywhere in the word: `did` → `đi`, `dieend` → `điên`.
+            case "d" where letters.first?.base == "d":
                 if letters[0].mark == .stroke {
                     word.letters[0].mark = .none
+                    word.pinTone()
                     word.append(key)
                     return .undone(word)
                 }
@@ -271,6 +317,8 @@ nonisolated enum Telex {
         private func applyingW(_ key: Character, nucleus: [Int]) -> Step {
             var word = self
             guard !nucleus.isEmpty else {
+                // f, j and z only start loanwords, which never go on with ư.
+                if letters.contains(where: { "fjz".contains($0.base) }) { return .literal }
                 word.letters.append(Letter(base: "u", mark: .horn, isUppercase: key.isUppercase, isBareW: true))
                 return .changed(word)
             }
@@ -286,6 +334,7 @@ nonisolated enum Telex {
 
             let hooked = nucleus.filter { [.horn, .breve].contains(letters[$0].mark) }
             if !hooked.isEmpty {
+                word.pinTone()
                 var typedW = false
                 for index in hooked {
                     if letters[index].isBareW {
@@ -373,7 +422,7 @@ nonisolated enum Telex {
                letters[parts.nucleus[0]].base == "u", letters[parts.nucleus[1]].base == "o" {
                 letters[parts.nucleus[0]].mark = .none
             }
-            let toneIndex = tone == .none ? nil : self.toneIndex(parts: parts)
+            let toneIndex = tone == .none ? nil : pinnedToneIndex ?? self.toneIndex(parts: parts)
             return String(letters.indices.map { letters[$0].rendered(tone: $0 == toneIndex ? tone : .none) })
         }
 
@@ -411,47 +460,92 @@ nonisolated struct TelexSession {
     /// Longer "words" (URLs, hashes) are left alone.
     static let maxKeys = 32
 
+    private struct TypedWord {
+        var keys: [Character] = []
+        var text = ""
+    }
+
     /// The current word as it appears on screen.
-    private(set) var text = ""
-    private var keys: [Character] = []
+    var text: String { word.text }
+
+    private var word = TypedWord()
     private var isTracking = true
+    /// The word before the spaces just typed: backspacing over the spaces goes
+    /// back to editing it (`viet␣` ⌫ `j` → `việt`).
+    private var previous: TypedWord?
+    private var spacesAfterPrevious = 0
 
     /// Returns the edit for a typed character, or nil to let the key through
     /// as is. Anything but a letter ends the word.
     mutating func type(_ key: Character) -> Edit? {
+        if key == " " {
+            if isTracking, !word.text.isEmpty {
+                previous = word
+                spacesAfterPrevious = 1
+            } else if previous != nil, word.text.isEmpty {
+                spacesAfterPrevious += 1
+            } else {
+                previous = nil
+            }
+            word = TypedWord()
+            isTracking = true
+            return nil
+        }
         guard key.isASCII, key.isLetter else {
             reset()
             return nil
         }
-        guard isTracking, keys.count < Self.maxKeys else {
+        guard isTracking, word.keys.count < Self.maxKeys else {
             isTracking = false
             return nil
         }
-        keys.append(key)
-        let composed = Telex.compose(keys)
-        let edit = Self.edit(from: text, to: composed)
-        text = composed
+        word.keys.append(key)
+        let composed = Telex.compose(word.keys)
+        let edit = Self.edit(from: word.text, to: composed)
+        word.text = composed
         return edit
     }
 
-    /// Call when a backspace deletes the last character on screen; the rest
-    /// of the word can still get marks (`tiếng` ⌫ `tiến` + `j` → `tiện`).
-    mutating func deleteBackward() {
-        guard isTracking, !text.isEmpty else {
+    /// Call for a backspace. Returns nil when the backspace can go through,
+    /// or the edit to make instead. The rest of the word can still get marks
+    /// (`tiếng` ⌫ `tiến` + `j` → `tiện`).
+    mutating func deleteBackward() -> Edit? {
+        guard isTracking else {
             reset()
-            return
+            return nil
         }
-        text.removeLast()
-        keys = Telex.keys(for: text)
-        if Telex.compose(keys) != text {
-            reset()
+        guard !word.text.isEmpty else {
+            guard let previous, spacesAfterPrevious > 0 else {
+                reset()
+                return nil
+            }
+            spacesAfterPrevious -= 1
+            if spacesAfterPrevious == 0 {
+                word = previous
+                self.previous = nil
+            }
+            return nil
         }
+        let remaining = String(word.text.dropLast())
+        let keys = Telex.keys(for: remaining)
+        if Telex.compose(keys) == remaining {
+            word = TypedWord(keys: keys, text: remaining)
+            return nil
+        }
+        // A word shown as typed (`vieetjn`): drop its last key and compose
+        // again (`việt`).
+        word.keys.removeLast()
+        let composed = Telex.compose(word.keys)
+        let edit = Self.edit(from: word.text, to: composed)
+        word.text = composed
+        return edit == Edit(backspaces: 1, text: "") ? nil : edit
     }
 
     mutating func reset() {
-        text = ""
-        keys = []
+        word = TypedWord()
         isTracking = true
+        previous = nil
+        spacesAfterPrevious = 0
     }
 
     static func edit(from old: String, to new: String) -> Edit {

@@ -142,8 +142,9 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
             return unchanged
         }
         if event.getIntegerValueField(.keyboardEventKeycode) == kVK_Delete {
-            session.deleteBackward()
-            return unchanged
+            guard let edit = session.deleteBackward() else { return unchanged }
+            post(edit, fixesAutocomplete: state.fixesAutocomplete, proxy: proxy)
+            return nil
         }
         guard let key = Self.character(of: event) else {
             session.reset()

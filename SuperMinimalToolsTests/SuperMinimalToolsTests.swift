@@ -384,6 +384,35 @@ struct TelexTests {
         #expect(type("ko") == "ko")
     }
 
+    @Test func behavesLikePHTV() {
+        // A d anywhere in the word.
+        #expect(type("did") == "đi")
+        #expect(type("dieend") == "điên")
+        #expect(type("ddid") == "did")
+        // ưo before more letters becomes ươ.
+        #expect(type("dduwong") == "đương")
+        #expect(type("dduwongf") == "đường")
+        #expect(type("nguwoif") == "người")
+        // Repeating a letter stretches the word.
+        #expect(type("ddepjppp") == "đẹpppp")
+        #expect(type("ddiii") == "điii")
+        #expect(type("ddifii") == "đìii")
+        #expect(type("khoongggg") == "khôngggg")
+        #expect(type("quasaa") == "quáaa")
+        #expect(type("owiii") == "ơiii")
+        // No ư after loanword initials.
+        #expect(type("fw") == "fw")
+        #expect(type("jw") == "jw")
+    }
+
+    @Test func abbreviationsKeepTheirD() {
+        #expect(type("ddc") == "đc")
+        #expect(type("ddt") == "đt")
+        #expect(type("Ddhs") == "Đhs")
+        #expect(type("DDC") == "ĐC")
+        #expect(Telex.compose(Telex.keys(for: "đc")) == "đc")
+    }
+
     @Test func keysRoundTripThroughText() {
         for word in ["người", "tiếng", "đường", "thuở", "quyết", "giữ", "ăn", "Việt", "hoà", "mưa", "string"] {
             #expect(Telex.compose(Telex.keys(for: word)) == word, "\(word)")
@@ -426,9 +455,33 @@ struct TelexSessionTests {
     @Test func backspaceKeepsTheRestOfTheWordEditable() {
         var session = TelexSession()
         for key in "tieengs" { _ = session.type(key) }
-        session.deleteBackward()
+        #expect(session.deleteBackward() == nil)
         #expect(session.text == "tiến")
         #expect(session.type("j") == .init(backspaces: 2, text: "ện"))
+    }
+
+    @Test func backspaceInAWordShownAsTypedComposesItAgain() {
+        var session = TelexSession()
+        for key in "vieetj" { _ = session.type(key) }
+        #expect(session.type("n") == .init(backspaces: 2, text: "eetjn"))
+        #expect(session.deleteBackward() == .init(backspaces: 5, text: "ệt"))
+        #expect(session.text == "việt")
+    }
+
+    @Test func backspacingOverASpaceGoesBackToThePreviousWord() {
+        var session = TelexSession()
+        for key in "vieet  " { _ = session.type(key) }
+        #expect(session.deleteBackward() == nil)
+        #expect(session.deleteBackward() == nil)
+        #expect(session.type("j") == .init(backspaces: 2, text: "ệt"))
+    }
+
+    @Test func otherKeysForgetThePreviousWord() {
+        var session = TelexSession()
+        for key in "viet ." { _ = session.type(key) }
+        _ = session.deleteBackward()
+        _ = session.deleteBackward()
+        #expect(session.type("j") == .init(backspaces: 0, text: "j"))
     }
 
     @Test func fallingBackToTheTypedKeysRewritesTheWord() {
