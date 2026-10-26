@@ -499,6 +499,7 @@ struct TelexPacingTests {
         #expect(VietnameseInput.pacing(for: "studio.boolery.shipdeck") == .terminal)
         #expect(VietnameseInput.pacing(for: "com.microsoft.VSCode") == .editor)
         #expect(VietnameseInput.pacing(for: "com.jetbrains.intellij") == .editor)
+        #expect(VietnameseInput.pacing(for: "com.tdesktop.Telegram") == .editor)
         #expect(VietnameseInput.pacing(for: "com.apple.Notes") == .none)
     }
 }

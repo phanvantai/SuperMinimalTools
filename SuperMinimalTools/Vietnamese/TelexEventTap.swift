@@ -18,7 +18,10 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
 
     /// Pauses between the events that rewrite a word. Terminals and editors
     /// read input asynchronously; sent back to back, the new text can arrive
-    /// before the backspaces and get deleted (`ca` + `s` leaving `c`).
+    /// together with the backspaces and get lost (`ca` + `s` leaving `c`).
+    /// Paced edits are typed from `output`: events posted from the tap
+    /// callback are only delivered once it returns, all at once, however
+    /// long it waits between them.
     struct Pacing: Equatable {
         /// After each backspace and each character.
         var betweenKeys: TimeInterval
@@ -47,6 +50,11 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
     private let shared: Mutex<Shared>
     private let onSwitch: @Sendable (Bool) -> Void
     private let source = CGEventSource(stateID: .privateState)
+    /// Types paced edits, and the keys pressed while one is being typed.
+    private let output = DispatchQueue(label: "Telex output", qos: .userInteractive)
+    /// Jobs on `output` not finished yet. While there are any, every key
+    /// goes through `output` too, so none overtakes a word being rewritten.
+    private let pendingOutput = Mutex(0)
 
     // Touched only on the tap thread (or before it starts).
     private var tap: CFMachPort?
@@ -159,26 +167,55 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
             return shared
         }
         if state.needsReset { session.reset() }
-        guard state.isVietnamese else { return unchanged }
+        let edit = state.isVietnamese ? self.edit(for: event) : nil
+        let isTyping = pendingOutput.withLock { $0 > 0 }
 
+        if let edit {
+            if isTyping || state.pacing != .none {
+                let keyboardType = event.getIntegerValueField(.keyboardEventKeyboardType)
+                enqueue { [self] in
+                    post(edit, keyboardType: keyboardType, state: state) { $0.post(tap: .cgSessionEventTap) }
+                }
+            } else {
+                post(edit, keyboardType: event.getIntegerValueField(.keyboardEventKeyboardType), state: state) {
+                    $0.tapPostEvent(proxy)
+                }
+            }
+            return nil
+        }
+        if isTyping, let copy = event.copy() {
+            copy.setIntegerValueField(.eventSourceUserData, value: Self.marker)
+            enqueue { copy.post(tap: .cgSessionEventTap) }
+            return nil
+        }
+        return unchanged
+    }
+
+    /// The edit to make instead of the key, or nil to let it through.
+    private func edit(for event: CGEvent) -> TelexSession.Edit? {
         // Shortcuts end the word.
         guard event.flags.isDisjoint(with: [.maskCommand, .maskControl, .maskAlternate]) else {
             session.reset()
-            return unchanged
+            return nil
         }
         if event.getIntegerValueField(.keyboardEventKeycode) == kVK_Delete {
-            guard let edit = session.deleteBackward() else { return unchanged }
-            post(edit, like: event, state: state, proxy: proxy)
-            return nil
+            return session.deleteBackward()
         }
         guard let key = Self.character(of: event) else {
             session.reset()
-            return unchanged
+            return nil
         }
         guard let edit = session.type(key),
-              edit != TelexSession.Edit(backspaces: 0, text: String(key)) else { return unchanged }
-        post(edit, like: event, state: state, proxy: proxy)
-        return nil
+              edit != TelexSession.Edit(backspaces: 0, text: String(key)) else { return nil }
+        return edit
+    }
+
+    private func enqueue(_ job: @escaping @Sendable () -> Void) {
+        pendingOutput.withLock { $0 += 1 }
+        output.async { [self] in
+            job()
+            pendingOutput.withLock { $0 -= 1 }
+        }
     }
 
     /// ⌃⇧ switches on release, and only if no other key was pressed meanwhile,
@@ -213,19 +250,17 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
 
     // MARK: - Output
 
-    /// Posts the edit right after the swallowed key `original`, from the tap
-    /// thread: the user's next keys wait until it is done, so they can't
-    /// slip in between.
-    private func post(_ edit: TelexSession.Edit, like original: CGEvent, state: Shared, proxy: CGEventTapProxy) {
-        let keyboardType = original.getIntegerValueField(.keyboardEventKeyboardType)
+    /// Types the edit as key presses handed to `send`, with the keyboard type
+    /// of the key it replaces.
+    private func post(_ edit: TelexSession.Edit, keyboardType: Int64, state: Shared, send: (CGEvent) -> Void) {
         let pacing = state.pacing
         var backspaces = edit.backspaces
         if backspaces > 0, state.fixesAutocomplete {
-            postKey(0, text: Self.autocompleteBreaker, keyboardType: keyboardType, proxy: proxy)
+            postKey(0, text: Self.autocompleteBreaker, keyboardType: keyboardType, send: send)
             backspaces += 1
         }
         for _ in 0..<backspaces {
-            postKey(CGKeyCode(kVK_Delete), text: nil, keyboardType: keyboardType, proxy: proxy)
+            postKey(CGKeyCode(kVK_Delete), text: nil, keyboardType: keyboardType, send: send)
             pause(pacing.betweenKeys)
         }
         if backspaces > 0 {
@@ -233,7 +268,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
         }
         // One character per event: some apps drop the rest of a longer string.
         for character in edit.text {
-            postKey(0, text: String(character), keyboardType: keyboardType, proxy: proxy)
+            postKey(0, text: String(character), keyboardType: keyboardType, send: send)
             pause(pacing.betweenKeys)
         }
     }
@@ -242,7 +277,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
         if interval > 0 { Thread.sleep(forTimeInterval: interval) }
     }
 
-    private func postKey(_ keyCode: CGKeyCode, text: String?, keyboardType: Int64, proxy: CGEventTapProxy) {
+    private func postKey(_ keyCode: CGKeyCode, text: String?, keyboardType: Int64, send: (CGEvent) -> Void) {
         for isDown in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: isDown) else { continue }
             // Don't let held modifiers (e.g. ⇧ for a capital) change what's
@@ -255,7 +290,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
                 let utf16 = Array(text.utf16)
                 event.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
             }
-            event.tapPostEvent(proxy)
+            send(event)
         }
     }
 }

@@ -69,6 +69,8 @@ final class VietnameseInput {
     private nonisolated static let editors: Set<String> = [
         "com.microsoft.vscode", "com.microsoft.vscodeinsiders", "com.vscodium", "com.todesktop.230313mzl4w4u92",
         "com.google.android.studio",
+        // Also drop rewritten letters sent back to back.
+        "com.tdesktop.telegram", "ru.keepcoder.telegram",
     ]
 
     nonisolated static func pacing(for bundleID: String) -> TelexEventTap.Pacing {
