@@ -27,6 +27,13 @@ struct SuperMinimalToolsApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("SuperMinimalTools Settings", id: "settings") {
+            SettingsView(stats: stats, updater: updater, clipboard: clipboard, vietnamese: vietnamese)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+
         Window("Disk Cleaner", id: "disk-cleaner") {
             DiskCleanerView()
         }
@@ -66,6 +73,11 @@ struct StatusBarLabel: View {
                 // Dev/testing hook: `open SuperMinimalTools.app --args --open-cleaner`
                 if CommandLine.arguments.contains("--open-cleaner") {
                     openWindow(id: "disk-cleaner")
+                    NSApp.activate()
+                }
+                // Dev/testing hook: `open SuperMinimalTools.app --args --open-settings`
+                if CommandLine.arguments.contains("--open-settings") {
+                    openWindow(id: "settings")
                     NSApp.activate()
                 }
                 // Dev/testing hook: exports the live readout as a PNG for docs:

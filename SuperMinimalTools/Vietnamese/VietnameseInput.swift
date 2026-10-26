@@ -108,7 +108,8 @@ final class VietnameseInput {
             return
         }
         let tap = TelexEventTap(isVietnamese: isVietnamese) { [weak self] isVietnamese in
-            Task { @MainActor in self?.isVietnamese = isVietnamese }
+            // Capture the weak reference's current value: the task can't read the closure's var.
+            Task { @MainActor [self] in self?.isVietnamese = isVietnamese }
         }
         tap.setFixesAutocomplete(currentBundleID.map(Self.browsers.contains) ?? false)
         guard tap.start() else {

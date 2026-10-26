@@ -5,154 +5,187 @@
 
 import SwiftUI
 import AppKit
-import ServiceManagement
 
-/// Dropdown shown when clicking the status bar item.
+/// Dropdown shown when clicking the status bar item: live readouts, the
+/// actions of the features that are on, and Settings. Every on/off choice
+/// lives in SettingsView.
 struct MenuContentView: View {
-    @Bindable var stats: SystemStatsStore
+    var stats: SystemStatsStore
     @Bindable var updater: AppUpdater
-    @Bindable var clipboard: ClipboardHistory
+    var clipboard: ClipboardHistory
     @Bindable var vietnamese: VietnameseInput
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @AppStorage("diskCleanerEnabled") private var diskCleanerEnabled = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                GridRow {
-                    Text("CPU temperature")
-                    Text(stats.cpuTemperature.map { "\(Int($0.rounded())) °C" } ?? "unavailable")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                GridRow {
-                    Text("Download")
-                    Text(ByteFormatting.rate(stats.bandwidth?.downloadBytesPerSecond ?? 0))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                GridRow {
-                    Text("Upload")
-                    Text(ByteFormatting.rate(stats.bandwidth?.uploadBytesPerSecond ?? 0))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            readouts
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
 
-            Divider()
-
-            Toggle("Show CPU temperature", isOn: $stats.showsCPUTemperature)
-            Toggle("Show network speed", isOn: $stats.showsBandwidth)
-
-            Divider()
-
-            Toggle("Enable Disk Cleaner", isOn: $diskCleanerEnabled)
-                .onChange(of: diskCleanerEnabled) { _, isOn in
-                    // Enabling walks the user through Full Disk Access in the
-                    // cleaner window before anything is scanned.
-                    if isOn {
-                        openDiskCleaner()
+            if diskCleanerEnabled || clipboard.isEnabled || vietnamese.isEnabled {
+                Divider()
+                VStack(spacing: 0) {
+                    if vietnamese.isEnabled {
+                        vietnameseRow
                     }
-                }
-            if diskCleanerEnabled {
-                Button("Disk Cleaner…") {
-                    openDiskCleaner()
-                }
-            }
-
-            Toggle("Enable Clipboard History", isOn: $clipboard.isEnabled)
-            if clipboard.isEnabled {
-                Button {
-                    dismiss()
-                    // After the dropdown is gone, or closing it takes focus from the panel.
-                    Task { clipboard.showPanel() }
-                } label: {
-                    HStack {
-                        Text("Clipboard History…")
-                        Spacer()
-                        Text("⌃⌘V")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Toggle("Enable Vietnamese Typing", isOn: $vietnamese.isEnabled)
-            if vietnamese.isEnabled {
-                if vietnamese.isTrusted {
-                    Toggle(isOn: $vietnamese.isVietnamese) {
-                        HStack {
-                            Text("Vietnamese (Telex)")
-                            Spacer()
-                            Text("⌃⇧")
-                                .foregroundStyle(.secondary)
+                    if clipboard.isEnabled {
+                        MenuRow("Clipboard History…", systemImage: "list.clipboard", shortcut: "⌃⌘V") {
+                            dismiss()
+                            // After the dropdown is gone, or closing it takes focus from the panel.
+                            Task { clipboard.showPanel() }
                         }
                     }
-                } else {
-                    Button("Allow Accessibility Access…") {
-                        dismiss()
-                        vietnamese.openAccessibilitySettings()
+                    if diskCleanerEnabled {
+                        MenuRow("Disk Cleaner…", systemImage: "externaldrive") {
+                            open("disk-cleaner")
+                        }
                     }
                 }
-                if let name = vietnamese.conflictingAppName {
-                    Text("Quit \(name), or letters get marked twice.")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                }
             }
-
-            Toggle("Launch at login", isOn: $launchAtLogin)
-                .onChange(of: launchAtLogin) { _, isOn in
-                    updateLaunchAtLogin(isOn)
-                }
 
             Divider()
 
             if let version = updater.pendingVersion {
                 Button("Update to \(version)…") {
-                    checkForUpdates()
+                    dismiss()
+                    updater.checkForUpdates()
                 }
                 .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
             }
-            Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
-            Button("Check for Updates…") {
-                checkForUpdates()
+            VStack(spacing: 0) {
+                MenuRow("Settings…", systemImage: "gearshape", shortcut: "⌘,") {
+                    open("settings")
+                }
+                .keyboardShortcut(",")
+                MenuRow("Quit SuperMinimalTools", systemImage: "power", shortcut: "⌘Q") {
+                    NSApp.terminate(nil)
+                }
+                .keyboardShortcut("q")
             }
-            .disabled(!updater.canCheckForUpdates)
-
-            Divider()
-
-            Button("Quit SuperMinimalTools") {
-                NSApp.terminate(nil)
-            }
-            .keyboardShortcut("q")
         }
-        .padding(12)
+        .padding(6)
         .frame(width: 250)
     }
 
-    private func openDiskCleaner() {
-        openWindow(id: "disk-cleaner")
+    private var readouts: some View {
+        Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 5) {
+            ReadoutRow(
+                title: "CPU", systemImage: "thermometer.medium", tint: .secondary,
+                value: stats.cpuTemperature.map { "\(Int($0.rounded())) °C" } ?? "unavailable"
+            )
+            ReadoutRow(
+                title: "Download", systemImage: "arrow.down", tint: .blue,
+                value: ByteFormatting.rate(stats.bandwidth?.downloadBytesPerSecond ?? 0)
+            )
+            ReadoutRow(
+                title: "Upload", systemImage: "arrow.up", tint: .red,
+                value: ByteFormatting.rate(stats.bandwidth?.uploadBytesPerSecond ?? 0)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var vietnameseRow: some View {
+        if vietnamese.isTrusted {
+            HStack(spacing: 8) {
+                Image(systemName: "character.cursor.ibeam")
+                    .frame(width: 16)
+                    .foregroundStyle(.secondary)
+                Text("Vietnamese")
+                Spacer()
+                Text("⌃⇧")
+                    .foregroundStyle(.secondary)
+                Toggle("Vietnamese", isOn: $vietnamese.isVietnamese)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .labelsHidden()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+        } else {
+            MenuRow("Allow Accessibility Access…", systemImage: "exclamationmark.triangle") {
+                dismiss()
+                vietnamese.openAccessibilitySettings()
+            }
+        }
+        if let name = vietnamese.conflictingAppName {
+            Text("Quit \(name), or letters get marked twice.")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 4)
+        }
+    }
+
+    private func open(_ windowID: String) {
+        openWindow(id: windowID)
         NSApp.activate()
         dismiss()
     }
+}
 
-    private func checkForUpdates() {
-        dismiss()
-        updater.checkForUpdates()
+private struct ReadoutRow: View {
+    var title: String
+    var systemImage: String
+    var tint: Color
+    var value: String
+
+    var body: some View {
+        GridRow {
+            Image(systemName: systemImage)
+                .foregroundStyle(tint)
+                .frame(width: 16)
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .monospacedDigit()
+                .gridColumnAlignment(.trailing)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+/// A button that looks and highlights like a menu item.
+private struct MenuRow: View {
+    var title: String
+    var systemImage: String
+    var shortcut: String?
+    var action: () -> Void
+    @State private var isHovered = false
+
+    init(_ title: String, systemImage: String, shortcut: String? = nil, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.shortcut = shortcut
+        self.action = action
     }
 
-    private func updateLaunchAtLogin(_ isOn: Bool) {
-        do {
-            if isOn {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .frame(width: 16)
+                    .foregroundStyle(isHovered ? .white : .secondary)
+                Text(title)
+                Spacer()
+                if let shortcut {
+                    Text(shortcut)
+                        .foregroundStyle(isHovered ? .white.opacity(0.8) : .secondary)
+                }
             }
-        } catch {
-            // Revert the toggle if registration failed (e.g. running from DerivedData).
-            launchAtLogin = SMAppService.mainApp.status == .enabled
+            .foregroundStyle(isHovered ? .white : .primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isHovered ? Color.accentColor : .clear)
+            )
         }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }

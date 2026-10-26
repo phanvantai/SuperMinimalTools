@@ -20,7 +20,7 @@
 
 - **CPU temperature** — the average CPU die temperature read from the SMC (the same source the Stats app uses), with an IOHID fallback.
 - **Network speed** — ↓ download (blue) and ↑ upload (red) across your physical interfaces.
-- Each metric can be shown or hidden from the dropdown.
+- Each metric can be shown or hidden in **Settings…** (⌘, in the dropdown).
 
 **🧹 Disk Cleaner** — built for developers whose 512 GB disk is always at 95%:
 
@@ -33,13 +33,13 @@
 - Risky categories (Archives, ML models, Docker, emulators, backups, `node_modules`, personal files) are marked **caution** and unchecked by default.
 - Disabled by default; enabling walks you through granting Full Disk Access.
 
-**📋 Clipboard History** — off by default; turn it on from the dropdown:
+**📋 Clipboard History** — off by default; turn it on in **Settings…**:
 
 - Remembers the last 200 pieces of text you copy, with the app they came from.
 - Press **⌃⌘V** anywhere (or choose **Clipboard History…**) for a Spotlight-style picker: type to search, ↑/↓ to choose, ↩ to copy it back, then ⌘V to paste. Right-click an item to delete it.
 - Text that password managers mark as concealed or transient is never recorded. The history is stored only on your Mac (`~/Library/Application Support/com.boolery.SuperMinimalTools/clipboard-history.json`, readable only by you) and is deleted when you turn the feature off.
 
-**🇻🇳 Vietnamese Typing** — off by default; turn it on from the dropdown:
+**🇻🇳 Vietnamese Typing** — off by default; turn it on in **Settings…**:
 
 - Telex with Unicode output in every app: `aa` â, `aw` ă, `ee` ê, `oo` ô, `ow` ơ, `uw`/`w` ư, `dd` đ, and `s` `f` `r` `x` `j` for the tones (`z` removes it). Tones go where modern spelling puts them (`hoà`, `thuý`), and can be typed at the end of a word (`vieetj` → `việt`).
 - Spell-checked: marks are only added while a word can still be Vietnamese, so `string`, `class` or `google` stay as typed.
@@ -55,7 +55,7 @@
 
 ### Download
 
-Get [SuperMinimalTools.zip](https://github.com/phanvantai/SuperMinimalTools/releases/latest/download/SuperMinimalTools.zip) from the latest release, unzip it and move the app to Applications. Builds are signed and notarized, and update themselves: the app checks GitHub once a day and asks before installing (turn it off with **Check for updates automatically** in the dropdown, or use **Check for Updates…**).
+Get [SuperMinimalTools.zip](https://github.com/phanvantai/SuperMinimalTools/releases/latest/download/SuperMinimalTools.zip) from the latest release, unzip it and move the app to Applications. Builds are signed and notarized, and update themselves: the app checks GitHub once a day and asks before installing (turn it off with **Check for updates automatically** in Settings, or use **Check Now** there).
 
 ### Build from source
 
@@ -77,7 +77,7 @@ Builds before 0.1.2 weren't notarized, so macOS Gatekeeper may block them: right
 - **Accessibility** is requested only when you enable Vietnamese Typing — it lets the app read keystrokes and replace a word as you type. Keystrokes are never stored or sent anywhere.
 - **Full Disk Access** is requested only when you enable the Disk Cleaner — macOS protects locations like the Trash and browser caches. The scan is read-only; nothing is deleted until you press Clean and confirm.
 - **No sandbox**: reading CPU temperature (SMC/IOKit) and cleaning caches outside the app's own container are impossible in a sandboxed app. This is also why the app can't be on the Mac App Store.
-- No analytics, no data collection. The only network request is the update check: it downloads the release feed (`appcast.xml`) from GitHub, sending nothing but the app's name and version (in the User-Agent). Turn it off from the dropdown.
+- No analytics, no data collection. The only network request is the update check: it downloads the release feed (`appcast.xml`) from GitHub, sending nothing but the app's name and version (in the User-Agent). Turn it off in Settings.
 
 ## How it works
 
