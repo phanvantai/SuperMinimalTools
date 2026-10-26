@@ -490,3 +490,15 @@ struct TelexSessionTests {
         #expect(session.type("h") == .init(backspaces: 1, text: "wh"))
     }
 }
+
+struct TelexPacingTests {
+
+    @Test func terminalsAndEditorsGetPacedOthersDont() {
+        #expect(VietnameseInput.pacing(for: "com.mitchellh.ghostty") == .terminal)
+        #expect(VietnameseInput.pacing(for: "com.apple.Terminal") == .terminal)
+        #expect(VietnameseInput.pacing(for: "studio.boolery.shipdeck") == .terminal)
+        #expect(VietnameseInput.pacing(for: "com.microsoft.VSCode") == .editor)
+        #expect(VietnameseInput.pacing(for: "com.jetbrains.intellij") == .editor)
+        #expect(VietnameseInput.pacing(for: "com.apple.Notes") == .none)
+    }
+}

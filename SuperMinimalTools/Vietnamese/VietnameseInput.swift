@@ -58,6 +58,26 @@ final class VietnameseInput {
         "com.apple.SafariTechnologyPreview",
     ]
 
+    /// Apps that read typed input asynchronously and need the rewrite paced.
+    private nonisolated static let terminals: Set<String> = [
+        "com.apple.terminal", "com.mitchellh.ghostty", "io.alacritty", "net.kovidgoyal.kitty",
+        "com.github.wez.wezterm", "com.googlecode.iterm2", "dev.warp.warp-stable", "co.zeit.hyper", "org.tabby",
+        "com.raphaelamorim.rio",
+        // Apps built around a terminal view (SwiftTerm).
+        "studio.boolery.shipdeck",
+    ]
+    private nonisolated static let editors: Set<String> = [
+        "com.microsoft.vscode", "com.microsoft.vscodeinsiders", "com.vscodium", "com.todesktop.230313mzl4w4u92",
+        "com.google.android.studio",
+    ]
+
+    nonisolated static func pacing(for bundleID: String) -> TelexEventTap.Pacing {
+        let id = bundleID.lowercased()
+        if terminals.contains(id) { return .terminal }
+        if editors.contains(id) || id.hasPrefix("com.jetbrains.") { return .editor }
+        return .none
+    }
+
     private let defaults: UserDefaults
     @ObservationIgnored private var modes: [String: Bool]
     @ObservationIgnored private var currentBundleID: String?
@@ -112,6 +132,7 @@ final class VietnameseInput {
             Task { @MainActor [self] in self?.isVietnamese = isVietnamese }
         }
         tap.setFixesAutocomplete(currentBundleID.map(Self.browsers.contains) ?? false)
+        tap.setPacing(currentBundleID.map(Self.pacing) ?? .none)
         guard tap.start() else {
             waitForPermission()
             return
@@ -154,6 +175,7 @@ final class VietnameseInput {
         currentBundleID = bundleID
         tap?.resetWord()
         tap?.setFixesAutocomplete(Self.browsers.contains(bundleID))
+        tap?.setPacing(Self.pacing(for: bundleID))
         if let saved = modes[bundleID] {
             isVietnamese = saved
         } else {

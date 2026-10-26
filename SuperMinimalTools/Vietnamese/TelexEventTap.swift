@@ -16,9 +16,25 @@ import Synchronization
 /// Needs the Accessibility permission.
 nonisolated final class TelexEventTap: @unchecked Sendable {
 
+    /// Pauses between the events that rewrite a word. Terminals and editors
+    /// read input asynchronously; sent back to back, the new text can arrive
+    /// before the backspaces and get deleted (`ca` + `s` leaving `c`).
+    struct Pacing: Equatable {
+        /// After each backspace and each character.
+        var betweenKeys: TimeInterval
+        /// After the last backspace, before the new text.
+        var afterDeleting: TimeInterval
+
+        static let none = Pacing(betweenKeys: 0, afterDeleting: 0)
+        static let editor = Pacing(betweenKeys: 0.008, afterDeleting: 0.025)
+        /// Slow enough for a TUI like Claude Code running in the terminal.
+        static let terminal = Pacing(betweenKeys: 0.015, afterDeleting: 0.048)
+    }
+
     private struct Shared {
         var isVietnamese: Bool
         var fixesAutocomplete = false
+        var pacing = Pacing.none
         var needsReset = false
     }
 
@@ -52,6 +68,10 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
     /// Turns on the empty-character workaround for apps with inline autocompletion.
     func setFixesAutocomplete(_ fixes: Bool) {
         shared.withLock { $0.fixesAutocomplete = fixes }
+    }
+
+    func setPacing(_ pacing: Pacing) {
+        shared.withLock { $0.pacing = pacing }
     }
 
     /// Forgets the current word, e.g. after switching apps.
@@ -148,7 +168,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
         }
         if event.getIntegerValueField(.keyboardEventKeycode) == kVK_Delete {
             guard let edit = session.deleteBackward() else { return unchanged }
-            post(edit, fixesAutocomplete: state.fixesAutocomplete, proxy: proxy)
+            post(edit, like: event, state: state, proxy: proxy)
             return nil
         }
         guard let key = Self.character(of: event) else {
@@ -157,7 +177,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
         }
         guard let edit = session.type(key),
               edit != TelexSession.Edit(backspaces: 0, text: String(key)) else { return unchanged }
-        post(edit, fixesAutocomplete: state.fixesAutocomplete, proxy: proxy)
+        post(edit, like: event, state: state, proxy: proxy)
         return nil
     }
 
@@ -193,30 +213,43 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
 
     // MARK: - Output
 
-    private func post(_ edit: TelexSession.Edit, fixesAutocomplete: Bool, proxy: CGEventTapProxy) {
+    /// Posts the edit right after the swallowed key `original`, from the tap
+    /// thread: the user's next keys wait until it is done, so they can't
+    /// slip in between.
+    private func post(_ edit: TelexSession.Edit, like original: CGEvent, state: Shared, proxy: CGEventTapProxy) {
+        let keyboardType = original.getIntegerValueField(.keyboardEventKeyboardType)
+        let pacing = state.pacing
         var backspaces = edit.backspaces
-        if backspaces > 0, fixesAutocomplete {
-            postText(Self.autocompleteBreaker, proxy: proxy)
+        if backspaces > 0, state.fixesAutocomplete {
+            postKey(0, text: Self.autocompleteBreaker, keyboardType: keyboardType, proxy: proxy)
             backspaces += 1
         }
         for _ in 0..<backspaces {
-            postKey(CGKeyCode(kVK_Delete), text: nil, proxy: proxy)
+            postKey(CGKeyCode(kVK_Delete), text: nil, keyboardType: keyboardType, proxy: proxy)
+            pause(pacing.betweenKeys)
+        }
+        if backspaces > 0 {
+            pause(pacing.afterDeleting)
         }
         // One character per event: some apps drop the rest of a longer string.
         for character in edit.text {
-            postText(String(character), proxy: proxy)
+            postKey(0, text: String(character), keyboardType: keyboardType, proxy: proxy)
+            pause(pacing.betweenKeys)
         }
     }
 
-    private func postText(_ text: String, proxy: CGEventTapProxy) {
-        postKey(0, text: text, proxy: proxy)
+    private func pause(_ interval: TimeInterval) {
+        if interval > 0 { Thread.sleep(forTimeInterval: interval) }
     }
 
-    private func postKey(_ keyCode: CGKeyCode, text: String?, proxy: CGEventTapProxy) {
+    private func postKey(_ keyCode: CGKeyCode, text: String?, keyboardType: Int64, proxy: CGEventTapProxy) {
         for isDown in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: isDown) else { continue }
-            // Don't let held modifiers (e.g. ⇧ for a capital) change what's typed.
-            event.flags = []
+            // Don't let held modifiers (e.g. ⇧ for a capital) change what's
+            // typed. Non-coalesced, like real key presses, so nothing merges
+            // or reorders them.
+            event.flags = .maskNonCoalesced
+            event.setIntegerValueField(.keyboardEventKeyboardType, value: keyboardType)
             event.setIntegerValueField(.eventSourceUserData, value: Self.marker)
             if let text {
                 let utf16 = Array(text.utf16)
