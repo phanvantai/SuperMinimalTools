@@ -12,6 +12,7 @@ struct MenuContentView: View {
     @Bindable var stats: SystemStatsStore
     @Bindable var updater: AppUpdater
     @Bindable var clipboard: ClipboardHistory
+    @Bindable var vietnamese: VietnameseInput
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -74,6 +75,30 @@ struct MenuContentView: View {
                         Text("⌃⌘V")
                             .foregroundStyle(.secondary)
                     }
+                }
+            }
+
+            Toggle("Enable Vietnamese Typing", isOn: $vietnamese.isEnabled)
+            if vietnamese.isEnabled {
+                if vietnamese.isTrusted {
+                    Toggle(isOn: $vietnamese.isVietnamese) {
+                        HStack {
+                            Text("Vietnamese (Telex)")
+                            Spacer()
+                            Text("⌃⇧")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    Button("Allow Accessibility Access…") {
+                        dismiss()
+                        vietnamese.openAccessibilitySettings()
+                    }
+                }
+                if let name = vietnamese.conflictingAppName {
+                    Text("Quit \(name), or letters get marked twice.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
 

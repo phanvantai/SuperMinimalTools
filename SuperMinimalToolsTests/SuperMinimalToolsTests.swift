@@ -309,3 +309,131 @@ struct ClipboardHistoryTests {
         #expect(reloaded.items.first?.sourceBundleID == "com.apple.Safari")
     }
 }
+
+struct TelexTests {
+
+    private func type(_ keys: String) -> String {
+        Telex.compose(Array(keys))
+    }
+
+    @Test func composesMarksAndTones() {
+        #expect(type("vieetj") == "việt")
+        #expect(type("tieengs") == "tiếng")
+        #expect(type("nguwowif") == "người")
+        #expect(type("nguowif") == "người")
+        #expect(type("dduwowngf") == "đường")
+        #expect(type("chuyeenr") == "chuyển")
+        #expect(type("muaw") == "mưa")
+        #expect(type("cuwux") == "cữu")
+        #expect(type("awns") == "ắn")
+        #expect(type("baanf") == "bần")
+        #expect(type("Ddaauf") == "Đầu")
+        #expect(type("VIEETJ") == "VIỆT")
+    }
+
+    @Test func tonesTypedAfterTheFinalConsonant() {
+        #expect(type("vietej") == "việt")
+        #expect(type("tooi") == "tôi")
+        #expect(type("toio") == "tôi")
+        #expect(type("cacs") == "các")
+    }
+
+    @Test func placesTonesTheModernWay() {
+        #expect(type("hoaf") == "hoà")
+        #expect(type("khoer") == "khoẻ")
+        #expect(type("thuys") == "thuý")
+        #expect(type("cuar") == "của")
+        #expect(type("mias") == "mía")
+        #expect(type("hoanf") == "hoàn")
+        #expect(type("ngoaif") == "ngoài")
+        #expect(type("thuowr") == "thuở")
+    }
+
+    @Test func quAndGiBelongToTheInitial() {
+        #expect(type("quas") == "quá")
+        #expect(type("quyeets") == "quyết")
+        #expect(type("gif") == "gì")
+        #expect(type("giaf") == "già")
+        #expect(type("giuwx") == "giữ")
+        #expect(type("gieengs") == "giếng")
+    }
+
+    @Test func bareWIsU() {
+        #expect(type("w") == "ư")
+        #expect(type("nhw") == "như")
+        #expect(type("wf") == "ừ")
+        #expect(type("ww") == "w")
+    }
+
+    @Test func pressingAMarkKeyTwiceTypesIt() {
+        #expect(type("ass") == "as")
+        #expect(type("aaa") == "aa")
+        #expect(type("ddd") == "dd")
+        #expect(type("aww") == "aw")
+        #expect(type("asz") == "a")
+    }
+
+    @Test func wordsThatCannotBeVietnameseStayAsTyped() {
+        #expect(type("string") == "string")
+        #expect(type("what") == "what")
+        #expect(type("class") == "class")
+        #expect(type("google") == "google")
+        #expect(type("facebook") == "facebook")
+        #expect(type("react") == "react")
+        #expect(type("hello") == "hello")
+        #expect(type("ko") == "ko")
+    }
+
+    @Test func keysRoundTripThroughText() {
+        for word in ["người", "tiếng", "đường", "thuở", "quyết", "giữ", "ăn", "Việt", "hoà", "mưa", "string"] {
+            #expect(Telex.compose(Telex.keys(for: word)) == word, "\(word)")
+        }
+    }
+
+    @Test func composesEveryWordOfARealSentence() {
+        let sentence = """
+            Tôi yêu tiếng nước tôi từ khi mới ra đời người ơi mẹ hiền ru những câu xa vời \
+            khuỷu tay huýt sáo khuếch tán nghiêng ngả quyển truyện giường chiếu oẳn tù tì \
+            thuở xưa hươu nai khuya rồi ngoẵng ngoéo dặn dò bướm lượn cửa sổ giặt giũ \
+            quốc gia Đà Nẵng Huế Sài Gòn những ngày xưa thân ái khoẻ không đấy
+            """
+        for word in sentence.split(separator: " ").map(String.init) {
+            #expect(Telex.compose(Telex.keys(for: word)) == word, "\(word)")
+        }
+    }
+}
+
+struct TelexSessionTests {
+
+    @Test func plainKeysPassThroughAndMarksRewriteTheWord() {
+        var session = TelexSession()
+        #expect(session.type("v") == .init(backspaces: 0, text: "v"))
+        #expect(session.type("i") == .init(backspaces: 0, text: "i"))
+        #expect(session.type("e") == .init(backspaces: 0, text: "e"))
+        #expect(session.type("e") == .init(backspaces: 1, text: "ê"))
+        #expect(session.type("t") == .init(backspaces: 0, text: "t"))
+        #expect(session.type("j") == .init(backspaces: 2, text: "ệt"))
+        #expect(session.text == "việt")
+    }
+
+    @Test func nonLettersEndTheWord() {
+        var session = TelexSession()
+        _ = session.type("a")
+        #expect(session.type(" ") == nil)
+        #expect(session.type("s") == .init(backspaces: 0, text: "s"))
+    }
+
+    @Test func backspaceKeepsTheRestOfTheWordEditable() {
+        var session = TelexSession()
+        for key in "tieengs" { _ = session.type(key) }
+        session.deleteBackward()
+        #expect(session.text == "tiến")
+        #expect(session.type("j") == .init(backspaces: 2, text: "ện"))
+    }
+
+    @Test func fallingBackToTheTypedKeysRewritesTheWord() {
+        var session = TelexSession()
+        #expect(session.type("w") == .init(backspaces: 0, text: "ư"))
+        #expect(session.type("h") == .init(backspaces: 1, text: "wh"))
+    }
+}

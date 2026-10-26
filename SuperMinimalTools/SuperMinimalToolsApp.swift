@@ -13,6 +13,7 @@ struct SuperMinimalToolsApp: App {
     @State private var stats = SystemStatsStore()
     @State private var updater = AppUpdater()
     @State private var clipboard = ClipboardHistory()
+    @State private var vietnamese = VietnameseInput()
 
     init() {
         Self.terminateOlderInstances()
@@ -20,9 +21,9 @@ struct SuperMinimalToolsApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(stats: stats, updater: updater, clipboard: clipboard)
+            MenuContentView(stats: stats, updater: updater, clipboard: clipboard, vietnamese: vietnamese)
         } label: {
-            StatusBarLabel(stats: stats)
+            StatusBarLabel(stats: stats, vietnamese: vietnamese)
         }
         .menuBarExtraStyle(.window)
 
@@ -38,7 +39,9 @@ struct SuperMinimalToolsApp: App {
     /// still running (e.g. left over from a previous debug session), quit it
     /// so the newest launch wins.
     private static func terminateOlderInstances() {
-        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        // Unit tests launch the app as their host; leave the user's copy running.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil,
+              let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
         let instances = NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier)
         for instance in instances where instance != NSRunningApplication.current {
             instance.forceTerminate()
@@ -53,6 +56,7 @@ struct SuperMinimalToolsApp: App {
 /// colors in the menu bar.
 struct StatusBarLabel: View {
     var stats: SystemStatsStore
+    var vietnamese: VietnameseInput
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openWindow) private var openWindow
 
@@ -100,7 +104,7 @@ struct StatusBarLabel: View {
 
     @ViewBuilder
     private var content: some View {
-        if stats.statusBarText.isEmpty {
+        if stats.statusBarText.isEmpty && !vietnamese.isEnabled {
             Image(systemName: "gauge.with.needle")
         } else {
             Image(nsImage: renderedImage)
@@ -110,6 +114,7 @@ struct StatusBarLabel: View {
     private var renderedImage: NSImage {
         let reading = stats.bandwidth ?? BandwidthReading(downloadBytesPerSecond: 0, uploadBytesPerSecond: 0)
         let content = StatusBarReadout(
+            modeText: vietnamese.isEnabled ? (vietnamese.isVietnamese ? "VI" : "EN") : nil,
             temperatureText: stats.showsCPUTemperature
                 ? (stats.cpuTemperature.map { "\(Int($0.rounded()))°" } ?? "--°")
                 : nil,
@@ -128,6 +133,7 @@ struct StatusBarLabel: View {
 }
 
 private struct StatusBarReadout: View {
+    var modeText: String? = nil
     var temperatureText: String?
     var downloadText: String?
     var uploadText: String?
@@ -135,6 +141,10 @@ private struct StatusBarReadout: View {
 
     var body: some View {
         HStack(spacing: 7) {
+            if let modeText {
+                Text(modeText)
+                    .foregroundStyle(baseColor)
+            }
             if let temperatureText {
                 Text(temperatureText)
                     .foregroundStyle(baseColor)
