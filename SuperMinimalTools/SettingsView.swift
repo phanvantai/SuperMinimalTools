@@ -106,6 +106,8 @@ private struct VietnameseStatus: View {
             } label: {
                 Label("Allow SuperMinimalTools under Accessibility", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
+                // macOS can keep the switch on for an older copy of the app.
+                Text("Already on? Remove SuperMinimalTools from the list with −, then add it again.")
             }
         }
         if let name = vietnamese.conflictingAppName {

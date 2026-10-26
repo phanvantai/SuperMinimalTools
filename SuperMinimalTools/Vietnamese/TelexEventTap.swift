@@ -80,6 +80,11 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
 
         let started = DispatchSemaphore(value: 0)
         let thread = Thread { [self] in
+            // Read the port through self: CFMachPort isn't Sendable.
+            guard let tap = self.tap else {
+                started.signal()
+                return
+            }
             runLoop = CFRunLoopGetCurrent()
             let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
             CFRunLoopAddSource(runLoop, source, .commonModes)

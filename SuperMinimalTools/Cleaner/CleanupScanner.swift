@@ -101,7 +101,8 @@ nonisolated enum CleanupScanner {
     /// of children and walking them one by one dominates the scan time.
     static func sizedItems(_ urls: [URL]) -> [ScannedItem] {
         guard !urls.isEmpty else { return [] }
-        let sizes = UnsafeMutableBufferPointer<Int64>.allocate(capacity: urls.count)
+        // Each iteration writes only its own slot.
+        nonisolated(unsafe) let sizes = UnsafeMutableBufferPointer<Int64>.allocate(capacity: urls.count)
         defer { sizes.deallocate() }
         DispatchQueue.concurrentPerform(iterations: urls.count) { index in
             sizes[index] = allocatedSize(at: urls[index])
