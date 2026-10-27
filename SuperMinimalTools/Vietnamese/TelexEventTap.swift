@@ -46,6 +46,10 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
     /// Typed and deleted again before rewriting a word, so a browser's
     /// address-bar autocompletion (selected text) isn't what gets deleted.
     private static let autocompleteBreaker = "\u{202F}"
+    /// The key code of the characters this tap types: one no keyboard has.
+    /// With the A key's code (0), an app could drop the letter while the
+    /// user still held A (`la` + `f` leaving `à`).
+    private static let textKeyCode: CGKeyCode = 0x42
 
     private let shared: Mutex<Shared>
     private let onSwitch: @Sendable (Bool) -> Void
@@ -256,7 +260,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
         let pacing = state.pacing
         var backspaces = edit.backspaces
         if backspaces > 0, state.fixesAutocomplete {
-            postKey(0, text: Self.autocompleteBreaker, keyboardType: keyboardType, send: send)
+            postKey(Self.textKeyCode, text: Self.autocompleteBreaker, keyboardType: keyboardType, send: send)
             backspaces += 1
         }
         for _ in 0..<backspaces {
@@ -268,7 +272,7 @@ nonisolated final class TelexEventTap: @unchecked Sendable {
         }
         // One character per event: some apps drop the rest of a longer string.
         for character in edit.text {
-            postKey(0, text: String(character), keyboardType: keyboardType, send: send)
+            postKey(Self.textKeyCode, text: String(character), keyboardType: keyboardType, send: send)
             pause(pacing.betweenKeys)
         }
     }
