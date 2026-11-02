@@ -503,3 +503,31 @@ struct TelexPacingTests {
         #expect(VietnameseInput.pacing(for: "com.apple.Notes") == .none)
     }
 }
+
+struct KeepAwakeTests {
+
+    @Test func remainingTextCountsDown() {
+        let now = Date(timeIntervalSinceReferenceDate: 0)
+        #expect(KeepAwake.remainingText(until: now.addingTimeInterval(30 * 60), now: now) == "30:00")
+        #expect(KeepAwake.remainingText(until: now.addingTimeInterval(59.2), now: now) == "1:00")
+        #expect(KeepAwake.remainingText(until: now.addingTimeInterval(3_725), now: now) == "1:02:05")
+        #expect(KeepAwake.remainingText(until: now.addingTimeInterval(-5), now: now) == "0:00")
+    }
+
+    @MainActor @Test func startAndStopTogglesTheAssertion() {
+        let keepAwake = KeepAwake()
+        keepAwake.start(minutes: 0)
+        #expect(!keepAwake.isActive)
+
+        keepAwake.start(minutes: 5)
+        #expect(keepAwake.isActive)
+        #expect(keepAwake.endDate != nil)
+
+        keepAwake.start(minutes: nil)
+        #expect(keepAwake.isActive)
+        #expect(keepAwake.endDate == nil)
+
+        keepAwake.stop()
+        #expect(!keepAwake.isActive)
+    }
+}

@@ -14,6 +14,7 @@ struct MenuContentView: View {
     @Bindable var updater: AppUpdater
     var clipboard: ClipboardHistory
     @Bindable var vietnamese: VietnameseInput
+    var keepAwake: KeepAwake
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
     @AppStorage("diskCleanerEnabled") private var diskCleanerEnabled = false
@@ -23,6 +24,9 @@ struct MenuContentView: View {
             readouts
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
+
+            Divider()
+            KeepAwakeRow(keepAwake: keepAwake)
 
             if diskCleanerEnabled || clipboard.isEnabled || vietnamese.isEnabled {
                 Divider()
@@ -124,6 +128,91 @@ struct MenuContentView: View {
         openWindow(id: windowID)
         NSApp.activate()
         dismiss()
+    }
+}
+
+/// "Keep Screen On" switch, with how long to keep it on while it's off and
+/// a countdown while it's on.
+private struct KeepAwakeRow: View {
+    var keepAwake: KeepAwake
+    @AppStorage("keepAwakeMinutes") private var minutesText = "30"
+    @AppStorage("keepAwakeForever") private var forever = false
+
+    private var minutes: Int? {
+        Int(minutesText).flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    private var isOn: Binding<Bool> {
+        Binding(
+            get: { keepAwake.isActive },
+            set: { $0 ? start() : keepAwake.stop() }
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: keepAwake.isActive ? "sun.max.fill" : "sun.max")
+                    .frame(width: 16)
+                    .foregroundStyle(keepAwake.isActive ? .orange : .secondary)
+                Text("Keep Screen On")
+                Spacer()
+                if keepAwake.isActive {
+                    status
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Toggle("Keep Screen On", isOn: isOn)
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .labelsHidden()
+                    .disabled(!keepAwake.isActive && !forever && minutes == nil)
+            }
+            if !keepAwake.isActive {
+                HStack(spacing: 6) {
+                    TextField("30", text: $minutesText)
+                        .textFieldStyle(.roundedBorder)
+                        .controlSize(.small)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 48)
+                        .disabled(forever)
+                        .onChange(of: minutesText) { _, new in
+                            let digits = String(new.filter(\.isNumber).prefix(4))
+                            if digits != new { minutesText = digits }
+                        }
+                        .onSubmit(start)
+                    Text("minutes")
+                        .foregroundStyle(forever ? .tertiary : .secondary)
+                    Spacer()
+                    Toggle("Forever", isOn: $forever)
+                        .toggleStyle(.checkbox)
+                        .controlSize(.small)
+                }
+                .font(.callout)
+                .padding(.leading, 24)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if let endDate = keepAwake.endDate {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text(KeepAwake.remainingText(until: endDate, now: context.date))
+            }
+        } else {
+            Text("∞")
+        }
+    }
+
+    private func start() {
+        if forever {
+            keepAwake.start(minutes: nil)
+        } else if let minutes {
+            keepAwake.start(minutes: minutes)
+        }
     }
 }
 

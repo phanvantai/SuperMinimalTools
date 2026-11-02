@@ -14,6 +14,7 @@ struct SuperMinimalToolsApp: App {
     @State private var updater = AppUpdater()
     @State private var clipboard = ClipboardHistory()
     @State private var vietnamese = VietnameseInput()
+    @State private var keepAwake = KeepAwake()
 
     init() {
         Self.terminateOlderInstances()
@@ -21,7 +22,7 @@ struct SuperMinimalToolsApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuContentView(stats: stats, updater: updater, clipboard: clipboard, vietnamese: vietnamese)
+            MenuContentView(stats: stats, updater: updater, clipboard: clipboard, vietnamese: vietnamese, keepAwake: keepAwake)
         } label: {
             StatusBarLabel(stats: stats, vietnamese: vietnamese)
         }

@@ -33,6 +33,8 @@
 - Risky categories (Archives, ML models, Docker, emulators, backups, `node_modules`, personal files) are marked **caution** and unchecked by default.
 - Disabled by default; enabling walks you through granting Full Disk Access.
 
+**☀️ Keep Screen On** — right in the dropdown: type how many minutes (or tick **Forever**) and flip the switch. The display won't sleep while it's on; the dropdown counts down the time left. Quitting the app always lets the Mac sleep again.
+
 **📋 Clipboard History** — off by default; turn it on in **Settings…**:
 
 - Remembers the last 200 pieces of text you copy, with the app they came from.
